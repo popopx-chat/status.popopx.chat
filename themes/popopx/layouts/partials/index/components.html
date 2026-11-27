@@ -1,0 +1,101 @@
+{{ $incidents := where .Site.RegularPages "Params.section" "issue" }}
+{{ $active := where $incidents "Params.resolved" "=" false }}
+
+{{ $isNotice := where $active "Params.severity" "=" "notice" }}
+{{ $isDisrupted := where $active "Params.severity" "=" "disrupted" }}
+{{ $isDown := where $active "Params.severity" "=" "down" }}
+
+<!-- Monitored systems -->
+<div class="categories">
+  {{ $systems := .Site.Params.systems }}
+  {{ $categories := .Site.Params.categories }}
+
+  {{ range $categories }}
+    <div class="category {{ if .closed }}category--closed{{ else }}category--open{{ end }}{{ if not .untitled }} category--titled{{ end }}" id="{{ .name | urlize }}">
+      {{ if not .untitled }}
+      <div class="bold padding clicky category__head" data-action="toggle-category" role="button" tabindex="0" aria-expanded="true">
+        <span class="hide-without-js">
+          <span class="category__closed-marker">►</span>
+          <span class="category__open-marker">▲</span>
+        </span>
+
+      <b>
+        {{ .name }}
+      </b>
+
+      {{ with .description }}
+        <span class="tooltip tooltip--small">
+          &nbsp; <span class="faded">(?)</span>
+
+          <span class="tooltip__text">
+            {{ . }}
+          </span>
+        </span>
+      {{ end }}
+
+      <span class="category-status"></span>
+
+      </div>
+      {{ else }}
+      <div class="padding"></div>
+      {{ end }}
+
+      {{ $categorySystems := where $systems "category" "=" .name }}
+
+      <div class="components">
+      {{ range $system := $categorySystems }}
+        {{ $activeComponentIssues := where $active "Params.affected" "intersect" (slice $system.name) }}
+
+        {{ $thisIsNotice := where $activeComponentIssues "Params.severity" "=" "notice" }}
+        {{ $thisIsDisrupted := where $activeComponentIssues "Params.severity" "=" "disrupted" }}
+        {{ $thisIsDown := where $activeComponentIssues "Params.severity" "=" "down" }}
+
+        <div class="component" data-system="{{ $system.name }}" data-status="{{ if $thisIsDown }}down{{ else }}{{ if $thisIsDisrupted }}disrupted{{ else }}{{ if $thisIsNotice }}notice{{ else }}ok{{ end }}{{ end }}{{ end }}">
+          <span class="component__name">{{ default $system.name $system.displayName }}</span>
+
+          {{ with $system.description }}
+            <span class="tooltip tooltip--small">
+              &nbsp; <span class="faded">(?)</span>
+
+              <span class="tooltip__text">
+                {{ . }}
+              </span>
+            </span>
+          {{ end }}
+
+          {{ with $system.link }}
+            <span class="span-icon">
+              <a href="{{ . }}" class="link-style" rel="noopener">
+                ↗
+              </a>
+            </span>
+          {{ end }}
+
+          <span class="probe-inline"></span>
+
+          <span class="component-status">
+            {{ if $thisIsDown }}
+              {{ T "thisIsDown" }}
+            {{ else }}
+            {{ if $thisIsDisrupted }}
+              {{ T "thisIsDisrupted" }}
+            {{ else }}
+            {{ if $thisIsNotice }}
+              {{ T "thisIsNotice" }}
+            {{ else }}
+              {{ T "thisIsOk" }}
+            {{ end }}{{ end }}{{ end }}
+          </span>
+
+          {{ with $system.partial }}
+          <div>
+            {{ partial . (dict "system" $system "incidents" $incidents) }}
+          </div>
+          {{ end }}
+        </div>
+      {{ end }}
+      </div>
+    </div>
+  {{ end }}
+
+</div>

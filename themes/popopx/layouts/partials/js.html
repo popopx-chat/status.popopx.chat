@@ -1,0 +1,369 @@
+<script type="text/javascript">
+  (function () {
+    'use strict';
+
+    var themeBrandColor = {{ .Site.Params.brand | jsonify | safeJS }};
+    var themeOkColor = {{ .Site.Params.ok | jsonify | safeJS }};
+    var themeNoticeColor = {{ .Site.Params.notice | jsonify | safeJS }};
+    var themeDisruptedColor = {{ .Site.Params.disrupted | jsonify | safeJS }};
+    var themeDownColor = {{ .Site.Params.down | jsonify | safeJS }};
+    var skipSeconds = {{ if .Site.Params.skipSeconds }}true{{ else }}false{{ end }};
+    var TEXT = {
+      yearsAgo: {{ T "yearsAgo" | jsonify | safeJS }},
+      monthsAgo: {{ T "monthsAgo" | jsonify | safeJS }},
+      daysAgo: {{ T "daysAgo" | jsonify | safeJS }},
+      hoursAgo: {{ T "hoursAgo" | jsonify | safeJS }},
+      minsAgo: {{ T "minsAgo" | jsonify | safeJS }},
+      secondsAgo: {{ T "secondsAgo" | jsonify | safeJS }},
+      justNow: {{ T "justNow" | jsonify | safeJS }},
+      someTimeAgo: {{ T "someTimeAgo" | jsonify | safeJS }},
+      thisIsOk: {{ T "thisIsOk" | jsonify | safeJS }},
+      thisIsDisrupted: {{ T "thisIsDisrupted" | jsonify | safeJS }},
+      thisIsNotice: {{ T "thisIsNotice" | jsonify | safeJS }},
+      thisIsDown: {{ T "thisIsDown" | jsonify | safeJS }}
+    };
+
+    document.documentElement.className = 'js';
+
+    /**
+     * Header color follows the current status when the brand color is not kept.
+     */
+    if (document.body.className.indexOf('change-header-color') !== -1) {
+      var metaTheme = document.querySelector('meta[name=theme-color]');
+      if (metaTheme) {
+        if (document.body.className.indexOf('status-down') !== -1) {
+          metaTheme.setAttribute('content', themeDownColor);
+        } else if (document.body.className.indexOf('status-disrupted') !== -1) {
+          metaTheme.setAttribute('content', themeDisruptedColor);
+        } else if (document.body.className.indexOf('status-notice') !== -1) {
+          metaTheme.setAttribute('content', themeNoticeColor);
+        } else {
+          metaTheme.setAttribute('content', themeBrandColor);
+        }
+      }
+    }
+
+    /**
+     * Relative timestamps.
+     */
+    function statusLabel(status) {
+      if (status === 'down') { return TEXT.thisIsDown; }
+      if (status === 'disrupted') { return TEXT.thisIsDisrupted; }
+      if (status === 'notice') { return TEXT.thisIsNotice; }
+      return TEXT.thisIsOk;
+    }
+
+    function timeSince(date) {
+      var seconds = Math.floor((new Date() - date) / 1000);
+      var interval = Math.floor(seconds / 31536000);
+      if (interval > 1) { return interval + ' ' + TEXT.yearsAgo; }
+      interval = Math.floor(seconds / 2592000);
+      if (interval > 1) { return interval + ' ' + TEXT.monthsAgo; }
+      interval = Math.floor(seconds / 86400);
+      if (interval > 1) { return interval + ' ' + TEXT.daysAgo; }
+      interval = Math.floor(seconds / 3600);
+      if (interval > 1) { return interval + ' ' + TEXT.hoursAgo; }
+      interval = Math.floor(seconds / 60);
+      if (interval > 1) { return interval + ' ' + TEXT.minsAgo; }
+      if (Math.floor(seconds) < 0) { return String(Math.floor(seconds)); }
+      if (skipSeconds) { return '<1 ' + TEXT.minsAgo; }
+      return Math.floor(seconds) + ' ' + TEXT.secondsAgo;
+    }
+
+    function updateRelativeTimes() {
+      var elements = document.querySelectorAll('.relative-time');
+      for (var i = 0; i < elements.length; i++) {
+        var element = elements[i];
+        if (element.getAttribute('data-time-unknown')) { continue; }
+        var time = Date.parse(element.getAttribute('title'));
+        var html = element.getAttribute('data-time-prefix') || '';
+        if (!time) {
+          time = element.textContent;
+          element.setAttribute('title', time || '');
+          html += TEXT.justNow;
+        } else if (timeSince(time) < 0) {
+          html = element.textContent;
+        } else {
+          html += timeSince(time) + ' ' + TEXT.someTimeAgo;
+        }
+        html += element.getAttribute('data-time-suffix') || '';
+        element.innerHTML = html.trim();
+      }
+    }
+
+    updateRelativeTimes();
+    setInterval(updateRelativeTimes, 5000);
+
+    /**
+     * Categories: expand/collapse and roll up the worst component status.
+     */
+    function toggleCategoryHead(element) {
+      var category = element.parentNode;
+      if (category.className.indexOf('category--open') !== -1) {
+        category.className = category.className.replace('category--open', 'category--closed');
+        element.setAttribute('aria-expanded', 'false');
+      } else {
+        category.className = category.className.replace('category--closed', 'category--open');
+        element.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    function refreshCategoryStatuses() {
+      var categories = document.querySelectorAll('.category--titled');
+      for (var i = 0; i < categories.length; i++) {
+        var category = categories[i];
+        var components = category.querySelectorAll('.component');
+        var worst = '';
+        for (var j = 0; j < components.length; j++) {
+          var status = components[j].getAttribute('data-status');
+          if (status === 'down') {
+            worst = 'down';
+          } else if (status === 'disrupted' && worst !== 'down') {
+            worst = 'disrupted';
+          } else if (status === 'notice' && worst !== 'down' && worst !== 'disrupted') {
+            worst = 'notice';
+          } else if (status === 'ok' && worst === '') {
+            worst = 'ok';
+          }
+        }
+        if (worst === '') { worst = 'ok'; }
+        var head = category.querySelector('.category__head');
+        var statusElement = category.querySelector('.category-status');
+        if (head) { head.setAttribute('data-status', worst); }
+        if (statusElement) { statusElement.textContent = statusLabel(worst); }
+      }
+    }
+
+    function bindCategoryHeads() {
+      var heads = document.querySelectorAll('.category__head');
+      function activate(event) {
+        if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') { return; }
+        if (event.type === 'keydown') { event.preventDefault(); }
+        toggleCategoryHead(this);
+      }
+      for (var i = 0; i < heads.length; i++) {
+        heads[i].addEventListener('click', activate);
+        heads[i].addEventListener('keydown', activate);
+      }
+    }
+
+    function bindReloaders() {
+      var buttons = document.querySelectorAll('[data-action="reload"]');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].addEventListener('click', function () { window.location.reload(); });
+        buttons[i].addEventListener('keydown', function (event) {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            window.location.reload();
+          }
+        });
+      }
+    }
+
+    /**
+     * 404 page: reveal the affected-system hint only on /affected/ URLs.
+     */
+    function revealAffectedHint() {
+      if (window.location.pathname.indexOf('affected') === -1) { return; }
+      var hint = document.querySelector('.affected-text');
+      if (hint) { hint.className = 'affected-text'; }
+    }
+
+    /**
+     * Live probe panel: reads the same-origin status.json produced by
+     * scripts/health_probe.py and mirrors it onto the component matrix.
+     */
+    function initLiveStatus() {
+      var root = document.getElementById('live-status');
+      if (!root || !window.fetch) { return; }
+
+      var statusUrl = root.getAttribute('data-status-url') || 'status.json';
+      var refreshMs = parseInt(root.getAttribute('data-refresh-ms'), 10) || 60000;
+      var staleAfter = parseInt(root.getAttribute('data-stale-after'), 10) || 600;
+      var metaElement = document.getElementById('probe-updated');
+      var summaryElement = document.getElementById('probe-summary');
+      var rows = root.querySelectorAll('.probe__row');
+      var rowIndex = {};
+      var i;
+
+      for (i = 0; i < rows.length; i++) {
+        rowIndex[rows[i].getAttribute('data-probe-host')] = rows[i];
+      }
+
+      var components = document.querySelectorAll('.component[data-system]');
+      var componentIndex = {};
+      for (i = 0; i < components.length; i++) {
+        componentIndex[components[i].getAttribute('data-system')] = components[i];
+      }
+
+      var stateText = {
+        up: root.getAttribute('data-i18n-up') || 'Operational',
+        degraded: root.getAttribute('data-i18n-degraded') || 'Degraded',
+        down: root.getAttribute('data-i18n-down') || 'Down',
+        unknown: root.getAttribute('data-i18n-unknown') || 'No data'
+      };
+      var summaryText = {
+        up: root.getAttribute('data-i18n-summary-up') || 'All monitored systems are operational',
+        degraded: root.getAttribute('data-i18n-summary-degraded') || 'Some monitored systems are degraded',
+        down: root.getAttribute('data-i18n-summary-down') || 'A monitored system is down',
+        unknown: root.getAttribute('data-i18n-summary-unknown') || 'Probe data unavailable'
+      };
+      var updatedLabel = root.getAttribute('data-i18n-updated') || 'Updated';
+      var staleLabel = root.getAttribute('data-i18n-stale') || 'stale';
+
+      function formatMs(value) {
+        return typeof value === 'number' && isFinite(value) ? Math.round(value) + ' ms' : '—';
+      }
+
+      function formatTls(tls) {
+        if (!tls || !tls.ok) { return 'TLS error'; }
+        var text = 'TLS ' + (tls.version || 'ok');
+        if (typeof tls.cert_days_left === 'number' && isFinite(tls.cert_days_left)) {
+          text += ' · cert ' + tls.cert_days_left + 'd';
+        }
+        return text;
+      }
+
+      function setRow(row, state, target) {
+        var stateCell = row.querySelector('.probe-state');
+        var httpCell = row.querySelector('.probe-http');
+        var tlsCell = row.querySelector('.probe-tls');
+        var latencyCell = row.querySelector('.probe-latency-ms');
+        row.setAttribute('data-state', state);
+        if (stateCell) { stateCell.textContent = stateText[state]; }
+        if (httpCell) { httpCell.textContent = target && target.http_status ? String(target.http_status) : '—'; }
+        if (tlsCell) { tlsCell.textContent = target ? formatTls(target.tls) : '—'; }
+        if (latencyCell) { latencyCell.textContent = target ? formatMs(target.latency_ms && target.latency_ms.total) : '—'; }
+      }
+
+      function setComponent(host, state, target) {
+        var component = componentIndex[host];
+        if (!component) { return; }
+        var mapped = state === 'up' ? 'ok' : (state === 'down' ? 'down' : (state === 'degraded' ? 'disrupted' : 'notice'));
+        component.setAttribute('data-status', mapped);
+        var statusElement = component.querySelector('.component-status');
+        if (statusElement) {
+          statusElement.textContent = mapped === 'notice' ? stateText.unknown : statusLabel(mapped);
+        }
+        var inline = component.querySelector('.probe-inline');
+        if (!inline) {
+          inline = document.createElement('span');
+          inline.className = 'probe-inline';
+          var anchor = statusElement || component.querySelector('.component__name');
+          if (anchor && anchor.parentNode) {
+            anchor.parentNode.insertBefore(inline, statusElement || null);
+          } else {
+            component.appendChild(inline);
+          }
+        }
+        inline.textContent = state === 'down' ? '' : formatMs(target && target.latency_ms && target.latency_ms.total);
+      }
+
+      function render(data) {
+        if (!data || data.schema !== 'popopx.status.v1' || !Array.isArray(data.targets)) {
+          throw new Error('unexpected status schema');
+        }
+
+        var worst = 'up';
+        var seen = {};
+        for (var n = 0; n < data.targets.length; n++) {
+          var target = data.targets[n];
+          if (!target || typeof target.host !== 'string') { continue; }
+          var state = target.state === 'up' || target.state === 'degraded' || target.state === 'down'
+            ? target.state
+            : 'degraded';
+          seen[target.host] = true;
+          if (state === 'down') {
+            worst = 'down';
+          } else if (state === 'degraded' && worst !== 'down') {
+            worst = 'degraded';
+          }
+          if (rowIndex[target.host]) { setRow(rowIndex[target.host], state, target); }
+          setComponent(target.host, state, target);
+        }
+
+        for (var host in rowIndex) {
+          if (Object.prototype.hasOwnProperty.call(rowIndex, host) && !seen[host]) {
+            setRow(rowIndex[host], 'unknown', null);
+            setComponent(host, 'degraded', null);
+            if (worst !== 'down') { worst = 'degraded'; }
+          }
+        }
+
+        if (summaryElement) {
+          summaryElement.textContent = summaryText[worst];
+          summaryElement.setAttribute('data-state', worst);
+        }
+
+        var summaryBanner = document.querySelector('.summary strong');
+        if (summaryBanner) { summaryBanner.textContent = summaryText[worst]; }
+        document.body.className = 'status-homepage status-' + (worst === 'up' ? 'ok' : worst);
+
+        var generated = new Date(data.generated_at);
+        var stale = false;
+        var summaryDate = document.querySelector('.summary__date');
+        if (!isNaN(generated.getTime())) {
+          var age = Math.floor((Date.now() - generated.getTime()) / 1000);
+          stale = age > staleAfter;
+          if (metaElement) {
+            metaElement.textContent = updatedLabel + ' ' + generated.toISOString().slice(11, 19) + ' UTC' + (stale ? ' · ' + staleLabel : '');
+          }
+          if (summaryDate) {
+            summaryDate.removeAttribute('data-time-unknown');
+            summaryDate.setAttribute('title', data.generated_at);
+            updateRelativeTimes();
+          }
+        } else {
+          if (metaElement) { metaElement.textContent = updatedLabel + ' —'; }
+          if (summaryDate) {
+            summaryDate.setAttribute('data-time-unknown', '1');
+            summaryDate.textContent = updatedLabel + ' —';
+          }
+        }
+        root.className = stale ? 'probe probe--stale' : 'probe';
+
+        refreshCategoryStatuses();
+      }
+
+      function fail(error) {
+        if (summaryElement) {
+          summaryElement.textContent = summaryText.unknown;
+          summaryElement.setAttribute('data-state', 'unknown');
+        }
+        var summaryBanner = document.querySelector('.summary strong');
+        if (summaryBanner) { summaryBanner.textContent = summaryText.unknown; }
+        if (metaElement) { metaElement.textContent = root.getAttribute('data-i18n-error') || 'Probe data unavailable'; }
+        var summaryDate = document.querySelector('.summary__date');
+        if (summaryDate) {
+          summaryDate.setAttribute('data-time-unknown', '1');
+          summaryDate.textContent = (root.getAttribute('data-i18n-error') || 'Probe data unavailable');
+        }
+        if (window.console && console.warn) { console.warn('POPOPX status probe fetch failed:', error && error.message ? error.message : error); }
+      }
+
+      function load() {
+        var separator = statusUrl.indexOf('?') === -1 ? '?' : '&';
+        fetch(statusUrl + separator + 't=' + Date.now(), {
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' }
+        }).then(function (response) {
+          if (!response.ok) { throw new Error('HTTP ' + response.status); }
+          return response.json();
+        }).then(render).catch(fail);
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { load(); }
+      });
+      load();
+      setInterval(load, refreshMs);
+    }
+
+    bindCategoryHeads();
+    bindReloaders();
+    refreshCategoryStatuses();
+    revealAffectedHint();
+    initLiveStatus();
+  })();
+</script>

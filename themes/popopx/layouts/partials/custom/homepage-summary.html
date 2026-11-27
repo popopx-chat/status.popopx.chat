@@ -1,0 +1,54 @@
+<section class="probe" id="live-status" aria-labelledby="probe-title"
+         data-status-url="{{ "status.json" | relURL }}"
+         data-refresh-ms="60000"
+         data-stale-after="600"
+         data-i18n-up="Operational"
+         data-i18n-degraded="Degraded"
+         data-i18n-down="Down"
+         data-i18n-unknown="No data"
+         data-i18n-summary-up="All monitored systems are operational"
+         data-i18n-summary-degraded="Some monitored systems are degraded"
+         data-i18n-summary-down="A monitored system is down"
+         data-i18n-summary-unknown="Probe data unavailable"
+         data-i18n-updated="Updated"
+         data-i18n-stale="stale"
+         data-i18n-error="Probe data unavailable">
+  <div class="probe__head">
+    <h3 class="probe__title" id="probe-title">Live health probes</h3>
+    <span class="probe__meta" id="probe-updated">Waiting for probe data</span>
+  </div>
+
+  <p class="probe__summary" id="probe-summary" data-state="unknown" aria-live="polite">Waiting for probe data</p>
+
+  <div class="probe__table-wrap">
+    <table class="probe__table">
+      <thead>
+        <tr>
+          <th scope="col">Node</th>
+          <th scope="col">State</th>
+          <th scope="col">HTTP</th>
+          <th scope="col">TLS</th>
+          <th scope="col">Latency</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .Site.Params.systems }}
+        <tr class="probe__row" data-probe-host="{{ .name }}" data-state="unknown">
+          <th scope="row">
+            <span class="probe__host">{{ .name }}</span>{{ with .link }} <a href="{{ . }}" class="no-underline" rel="noopener" aria-label="{{ $.Site.Title }}: {{ . }}">↗</a>{{ end }}
+          </th>
+          <td class="probe-state">Waiting</td>
+          <td class="probe-http">—</td>
+          <td class="probe-tls">—</td>
+          <td class="probe-latency-ms">—</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="probe__hint">
+    Raw data: <a href="{{ "status.json" | relURL }}">status.json</a> · generated on the POPOPX relay host every 2 minutes ·
+    <a href="{{ "index.json" | relURL }}">JSON feed</a>
+  </p>
+</section>
